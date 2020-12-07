@@ -1,52 +1,52 @@
 FROM jenkins/jenkins
 
-#ZSH AND OH-MY-ZSH
 USER root
-RUN ["apt-get", "update"]
-RUN ["apt-get", "install", "-y", "apt-utils"]
-RUN ["apt-get", "install", "-y", "zsh"]
-RUN sh -c "$(wget -q -O- https://github.com/deluan/zsh-in-docker/releases/download/v1.1.1/zsh-in-docker.sh)" -- \
-    -t robbyrussell
-RUN zsh
 
-#DOCKER COMMAND LINE INTERFACE
-RUN wget -q https://download.docker.com/linux/debian/dists/stretch/pool/stable/amd64/docker-ce-cli_19.03.9~3-0~debian-stretch_amd64.deb -O \
-    docker-ce-cli.deb
-RUN chmod +x docker-ce-cli.deb
-RUN dpkg -i docker-ce-cli.deb
-RUN rm docker-ce-cli.deb
+#UPDATING
+RUN apt-get update && apt-get install --no-install-recommends -y \
+    apt-utils \
+    curl \
+    zsh \
+    sudo \
+    git \
+    apt-transport-https \
+    ca-certificates \
+    gnupg-agent \
+    software-properties-common
 
-#OH MY ZSH FOR JENKINS USER
-# RUN su jenkins
-USER jenkins
-RUN sh -c "$(wget -q -O- https://github.com/deluan/zsh-in-docker/releases/download/v1.1.1/zsh-in-docker.sh)" -- \
-    -t robbyrussell
+#USRS AND PERMISSIONS
+RUN groupadd docker
+RUN groupadd chsh
+RUN usermod -aG docker root
+RUN usermod -aG docker jenkins
+RUN usermod -aG chsh jenkins
+
+#DOCKER
+ENV APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=1
+RUN curl -fsSL https://download.docker.com/linux/debian/gpg | apt-key add -
+RUN add-apt-repository \
+   "deb [arch=amd64] https://download.docker.com/linux/debian \
+   $(lsb_release -cs) \
+   stable"
+RUN apt-get update
+RUN apt-get install --no-install-recommends -y docker-ce docker-ce-cli containerd.io
+
+#OH MY ZSH CONFIGS
+RUN curl -fsSL https://raw.githubusercontent.com/robbyrussell/oh-my-zsh/master/tools/install.sh -o /zsh-in-docker.sh
+RUN chmod +x /zsh-in-docker.sh
+
+#CHANGE SHELL PERMISSIONS
+RUN zsh -c /zsh-in-docker.sh || true
+RUN ln -f /bin/zsh /bin/sh
+RUN sed -i 's/pam_rootok.so/pam_wheel.so\ttrust\tgroup=chsh/g' /etc/pam.d/chsh
+
+#SCRIPT TO RUN ON BASH CREATION
+RUN su jenkins
+COPY ./bash-template.sh /bt.sh
+RUN echo " source /bt.sh" >> /etc/bash.bashrc
 RUN exit
 
-USER root
-RUN touch /var/run/docker.sock
-RUN echo "running jenkins configurations"
-RUN groupadd docker
-RUN usermod -aG docker jenkins
-RUN chown jenkins:docker /var/run/docker.sock
-
+#SCRIPT TO ACTIVATE DOCKER SOCKET
+RUN (echo 'jenkins    ALL = (ALL) NOPASSWD: ALL' > /etc/sudoers.d/jenkinsnosudo &&\
+  chmod 0440 /etc/sudoers.d/jenkinsnosudo)
 USER jenkins
-RUN zsh
-
-
-# FROM blabla
-# RUN do stuff
-# RUN chown -R foo /var/run/docker.sock
-# USER jenkins
-# VOLUME /var/run/docker.sock
-# CMD ["blabla.sh"]
-
-
-
-# USER root
-# RUN echo "running jenkins configurations"
-# RUN groupadd docker
-# RUN usermod -aG docker jenkins
-# RUN chown jenkins:docker /var/run/docker.sock
-# USER jenkins
-# ~
